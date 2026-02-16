@@ -1,126 +1,223 @@
 /**
  * Auth Store
- * Manages user authentication state using Zustand
+ * Manages user authentication state using Redux Toolkit
  */
 
-import { create } from "zustand";
+import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import { useDispatch, useSelector } from "react-redux";
 import { authAPI } from "../services/apiService";
+import { selectAuth } from "./authSelectors";
 
-// Global flag to prevent multiple initialization attempts
-let initializationStarted = false;
-
-export const useAuthStore = create((set, get) => ({
+const initialState = {
   user: null,
   isLoading: false,
   isAuthenticated: false,
   error: null,
   initialized: false,
+};
 
-  // Initialize user from cookie on app load (only once globally)
-  initAuth: async () => {
-    // Double-check at global level first (fastest check)
-    if (initializationStarted) {
-      return;
-    }
-
-    const state = get();
-
-    // Check again at store level
-    if (state.initialized) {
-      return;
-    }
-
+export const initAuth = createAsyncThunk(
+  "auth/initAuth",
+  async (_, { rejectWithValue }) => {
     try {
-      initializationStarted = true;
-      set({ isLoading: true });
-
       const response = await authAPI.getMe();
-
-      set({
-        user: response.data.user,
-        isAuthenticated: true,
-        isLoading: false,
-        initialized: true,
-        error: null
-      });
+      return response.data;
     } catch (err) {
-      // User is not authenticated - that's okay
-      set({
-        isLoading: false,
-        isAuthenticated: false,
-        user: null,
-        initialized: true,
-        error: null
-      });
+      return rejectWithValue(err.response?.data?.message || "Not authenticated");
     }
   },
+  {
+    condition: (_, { getState }) => {
+      const authState = getState().auth;
+      return !authState.initialized && !authState.isLoading;
+    },
+  }
+);
 
-  // Register user
-  register: async (data) => {
+export const register = createAsyncThunk(
+  "auth/register",
+  async (data, { rejectWithValue }) => {
     try {
-      set({ isLoading: true });
       const response = await authAPI.register(data);
-      set({ user: response.data.user, isAuthenticated: true, isLoading: false });
       return response.data;
     } catch (err) {
-      set({ error: err.response?.data?.message || "Registration failed", isLoading: false });
-      throw err;
+      return rejectWithValue(err.response?.data?.message || "Registration failed");
     }
-  },
+  }
+);
 
-  // Login user
-  login: async (data) => {
+export const login = createAsyncThunk(
+  "auth/login",
+  async (data, { rejectWithValue }) => {
     try {
-      set({ isLoading: true });
       const response = await authAPI.login(data);
-      set({ user: response.data.user, isAuthenticated: true, isLoading: false });
       return response.data;
     } catch (err) {
-      set({ error: err.response?.data?.message || "Login failed", isLoading: false });
-      throw err;
+      return rejectWithValue(err.response?.data?.message || "Login failed");
     }
-  },
+  }
+);
 
-  // Logout user
-  logout: async () => {
+export const logout = createAsyncThunk(
+  "auth/logout",
+  async (_, { rejectWithValue }) => {
     try {
       await authAPI.logout();
+      return null;
     } catch (err) {
-      // Silently fail logout API call - we'll still clear the state
-    } finally {
-      // Always reset the auth state, regardless of API call result
-      set({
-        user: null,
-        isAuthenticated: false,
-        error: null,
-        initialized: true, // Keep initialized as true
-      });
+      // Preserve previous behavior: clear local auth even if API logout fails.
+      return rejectWithValue(err.response?.data?.message || "Logout failed");
     }
-  },
+  }
+);
 
-  // Update profile
-  updateProfile: async (data) => {
+export const updateProfile = createAsyncThunk(
+  "auth/updateProfile",
+  async (data, { rejectWithValue }) => {
     try {
-      set({ isLoading: true });
       const response = await authAPI.updateProfile(data);
-      set({ user: response.data.user, isLoading: false });
       return response.data;
     } catch (err) {
-      set({ error: err.response?.data?.message || "Update failed", isLoading: false });
-      throw err;
+      return rejectWithValue(err.response?.data?.message || "Update failed");
     }
+  }
+);
+
+const authSlice = createSlice({
+  name: "auth",
+  initialState,
+  reducers: {
+    clearError: (state) => {
+      state.error = null;
+    },
+    resetAuth: (state) => {
+      state.user = null;
+      state.isAuthenticated = false;
+      state.error = null;
+      state.initialized = true;
+      state.isLoading = false;
+    },
   },
+  extraReducers: (builder) => {
+    builder
+      .addCase(initAuth.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(initAuth.fulfilled, (state, action) => {
+        state.user = action.payload.user;
+        state.isAuthenticated = true;
+        state.isLoading = false;
+        state.initialized = true;
+        state.error = null;
+      })
+      .addCase(initAuth.rejected, (state) => {
+        // Failed init means user is unauthenticated; still mark app init complete.
+        state.user = null;
+        state.isAuthenticated = false;
+        state.isLoading = false;
+        state.initialized = true;
+        state.error = null;
+      })
+      .addCase(register.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(register.fulfilled, (state, action) => {
+        state.user = action.payload.user;
+        state.isAuthenticated = true;
+        state.isLoading = false;
+        state.initialized = true;
+        state.error = null;
+      })
+      .addCase(register.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload || "Registration failed";
+      })
+      .addCase(login.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(login.fulfilled, (state, action) => {
+        state.user = action.payload.user;
+        state.isAuthenticated = true;
+        state.isLoading = false;
+        state.initialized = true;
+        state.error = null;
+      })
+      .addCase(login.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload || "Login failed";
+      })
+      .addCase(logout.pending, (state) => {
+        state.isLoading = true;
+      })
+      .addCase(logout.fulfilled, (state) => {
+        state.user = null;
+        state.isAuthenticated = false;
+        state.error = null;
+        state.initialized = true;
+        state.isLoading = false;
+      })
+      .addCase(logout.rejected, (state) => {
+        state.user = null;
+        state.isAuthenticated = false;
+        state.error = null;
+        state.initialized = true;
+        state.isLoading = false;
+      })
+      .addCase(updateProfile.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.user = action.payload.user;
+        state.isLoading = false;
+        state.error = null;
+      })
+      .addCase(updateProfile.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload || "Update failed";
+      });
+  },
+});
 
-  // Clear error
-  clearError: () => set({ error: null }),
+export const { clearError, resetAuth } = authSlice.actions;
+export const authReducer = authSlice.reducer;
 
-  // Reset auth state (for API interceptor or manual reset)
-  resetAuth: () => set({
-    user: null,
-    isAuthenticated: false,
-    error: null,
-    initialized: true,
-  }),
-}));
+const unwrapWithAxiosErrorShape = (promise) =>
+  promise.catch((err) => {
+    if (typeof err === "string") {
+      const normalizedError = new Error(err);
+      normalizedError.response = { data: { message: err } };
+      throw normalizedError;
+    }
+    throw err;
+  });
+
+const createBoundAuthApi = (state, dispatch) => ({
+  ...state,
+  initAuth: () => unwrapWithAxiosErrorShape(dispatch(initAuth()).unwrap()),
+  register: (data) => unwrapWithAxiosErrorShape(dispatch(register(data)).unwrap()),
+  login: (data) => unwrapWithAxiosErrorShape(dispatch(login(data)).unwrap()),
+  logout: () =>
+    unwrapWithAxiosErrorShape(dispatch(logout()).unwrap()).catch(() => undefined),
+  updateProfile: (data) =>
+    unwrapWithAxiosErrorShape(dispatch(updateProfile(data)).unwrap()),
+  clearError: () => dispatch(clearError()),
+  resetAuth: () => dispatch(resetAuth()),
+});
+
+export const useAuthStore = (selector) => {
+  const authState = useSelector(selectAuth);
+  const dispatch = useDispatch();
+  const api = createBoundAuthApi(authState, dispatch);
+
+  if (typeof selector === "function") {
+    return selector(api);
+  }
+
+  return api;
+};
 
 export default useAuthStore;

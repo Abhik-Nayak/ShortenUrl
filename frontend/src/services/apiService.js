@@ -18,14 +18,9 @@ apiClient.interceptors.response.use(
   (error) => {
     // Handle 401 Unauthorized errors
     if (error.response?.status === 401) {
-      // Import here to avoid circular dependency
-      const { default: useAuthStore } = require("../store/authStore");
-
-      // Reset auth state properly using the resetAuth function
-      const resetAuth = useAuthStore.getState().resetAuth;
-      if (resetAuth) {
-        resetAuth();
-      }
+      const { store } = require("../store");
+      const { resetAuth } = require("../store/authStore");
+      store.dispatch(resetAuth());
     }
 
     // Always reject the error to let the caller handle it
