@@ -1,0 +1,32 @@
+version: "3.9"
+services:
+  mongo:
+    image: mongo:7
+    container_name: shortenurl-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  server:
+    build: ./server
+    container_name: shortenurl-server
+    env_file:
+      - ./server/.env
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongo
+
+  client:
+    build: ./client
+    container_name: shortenurl-client
+    env_file:
+      - ./client/.env
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+
+volumes:
+  mongo_data:
