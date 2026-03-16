@@ -38,7 +38,7 @@ export const redirectToOriginalUrl = async (req: Request, res: Response): Promis
       return;
     }
 
-    res.redirect(url.originalUrl);
+    res.redirect(url);
   } catch (error) {
     res.status(500).json({
       message: "Failed to redirect",

@@ -1,10 +1,13 @@
 import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import mongoose from "mongoose";
 import Url from "./models/Url";
 import urlRoutes from "./routes/urlRoutes";
+import { connectRedis } from "./config/redis";
 
-dotenv.config();
+
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -19,6 +22,7 @@ app.get("/", (_req, res) => {
 app.use("/", urlRoutes);
 app.use("/api/urls", urlRoutes);
 
+connectRedis();
 const startServer = async (): Promise<void> => {
   try {
     if (!mongoUri) {
