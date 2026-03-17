@@ -2,6 +2,7 @@ import { redisClient } from "../config/redis";
 import Url, { IUrl } from "../models/Url";
 import { encode } from "../utils/base62";
 import { idGenerator } from "../utils/snowflake";
+import { publishClickEvent } from "../config/rabbitmq";
 
 interface CreateShortUrlResult {
   isExisting: boolean;
@@ -66,10 +67,8 @@ export const getOriginalUrlByCode = async (
     EX: 3600,
   });
 
-  // 4️⃣ update click count
-  url.clicks += 1;
-
-  await url.save();
+  // 4️⃣ Push click event to Queue instead of saving to DB directly
+  publishClickEvent(shortCode);
 
   return url.originalUrl;
 };
