@@ -1,6 +1,7 @@
 import { redisClient } from "../config/redis";
 import Url, { IUrl } from "../models/Url";
 import { encode } from "../utils/base62";
+import { idGenerator } from "../utils/snowflake";
 
 interface CreateShortUrlResult {
   isExisting: boolean;
@@ -25,15 +26,12 @@ export const createShortUrlService = async (
     };
   }
 
+  // generate robust and distributed unique id
+  const uniqueId = idGenerator.nextId();
+  const shortCode = encode(uniqueId);
+
   // create document first
-  const newUrl = await Url.create({ originalUrl, shortCode: "temp" });
-
-  // generate base62 short code
-  const shortCode = encode(newUrl._id.toString().length + Date.now());
-
-  newUrl.shortCode = shortCode;
-
-  await newUrl.save();
+  const newUrl = await Url.create({ originalUrl, shortCode });
 
   return {
     isExisting: false,
