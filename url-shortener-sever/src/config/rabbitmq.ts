@@ -1,9 +1,14 @@
 import amqp from "amqplib";
 import Url from "../models/Url";
+import createLogger from "../utils/logger";
+
+const log = createLogger("RabbitMQ");
 
 let channel: amqp.Channel;
 
 const QUEUE_NAME = "url_clicks_queue";
+
+export const isRabbitMQConnected = (): boolean => !!channel;
 
 export const connectRabbitMQ = async (): Promise<void> => {
   try {
@@ -17,18 +22,18 @@ export const connectRabbitMQ = async (): Promise<void> => {
 
     channel = await connection.createChannel();
     await channel.assertQueue(QUEUE_NAME, { durable: true });
-    console.log("Connected to RabbitMQ & Queue Asserted.");
+    log.info("Connected & queue asserted");
 
     // Start the background consumer
     startClickBatchWorker();
   } catch (error) {
-    console.error("RabbitMQ Connection Failed:", error);
+    log.error("Connection failed", { error: error instanceof Error ? error.message : String(error) });
   }
 };
 
 export const publishClickEvent = (shortCode: string): void => {
   if (!channel) {
-    console.warn("RabbitMQ channel not initialized. Dropping click event.");
+    log.warn("Channel not initialized, dropping click event", { shortCode });
     return;
   }
   channel.sendToQueue(QUEUE_NAME, Buffer.from(JSON.stringify({ shortCode })));
@@ -59,7 +64,7 @@ const flushBatchToDB = async () => {
 
     if (bulkOps.length > 0) {
       await Url.bulkWrite(bulkOps);
-      console.log(`Successfully synced ${bulkOps.length} URL click updates to MongoDB.`);
+      log.info("Flushed click batch to MongoDB", { urls: bulkOps.length, messages: messagesToAck.length });
     }
 
     // Ack all messages only after successful DB write
@@ -67,7 +72,7 @@ const flushBatchToDB = async () => {
       channel.ack(msg);
     }
   } catch (error) {
-    console.error("Failed to sync clicks to MongoDB. Nacking messages for redelivery.", error);
+    log.error("Flush failed, nacking messages for redelivery", { error: error instanceof Error ? error.message : String(error) });
     // Nack all messages so RabbitMQ redelivers them
     for (const msg of messagesToAck) {
       channel.nack(msg, false, true);

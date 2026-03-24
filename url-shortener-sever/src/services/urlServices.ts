@@ -3,6 +3,9 @@ import Url, { IUrl } from "../models/Url";
 import { encode } from "../utils/base62";
 import { idGenerator } from "../utils/snowflake";
 import { publishClickEvent } from "../config/rabbitmq";
+import createLogger from "../utils/logger";
+
+const log = createLogger("URLService");
 
 interface CreateShortUrlResult {
   isExisting: boolean;
@@ -48,13 +51,12 @@ export const getOriginalUrlByCode = async (
   const cachedUrl = await redisClient.get(shortCode);
 
   if (cachedUrl) {
-    console.log("Cache hit");
-    // Track click regardless of cache hit/miss
+    log.debug("Cache hit", { shortCode });
     publishClickEvent(shortCode);
     return cachedUrl;
   }
 
-  console.log("Cache miss");
+  log.debug("Cache miss", { shortCode });
 
   // 2️⃣ query database
   const url = await Url.findOne({ shortCode });
