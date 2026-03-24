@@ -3,7 +3,6 @@ dotenv.config();
 
 import express from "express";
 import mongoose from "mongoose";
-import Url from "./models/Url";
 import urlRoutes from "./routes/urlRoutes";
 import { connectRedis } from "./config/redis";
 import { connectRabbitMQ } from "./config/rabbitmq";
@@ -12,9 +11,10 @@ import cors from "cors";
 const app = express();
 const port = process.env.PORT || 5000;
 const mongoUri = process.env.MONGO_URI;
+const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:3000";
 
 app.use(cors({
-  origin: "http://localhost:3000", // Allow our Next.js UI
+  origin: corsOrigin,
   methods: ["GET", "POST"],
   credentials: true
 }));
@@ -27,8 +27,6 @@ app.get("/", (_req, res) => {
 app.use("/", urlRoutes);
 app.use("/api/urls", urlRoutes);
 
-connectRedis();
-
 const startServer = async (): Promise<void> => {
   try {
     if (!mongoUri) {
@@ -37,18 +35,8 @@ const startServer = async (): Promise<void> => {
 
     await mongoose.connect(mongoUri);
     console.log("MongoDB connected");
+    await connectRedis();
     await connectRabbitMQ();
-
-    try {
-      await Url.collection.dropIndex("shortId_1");
-      console.log("Removed stale shortId index");
-    } catch (error) {
-      const indexError = error as { codeName?: string; message?: string };
-
-      if (indexError.codeName !== "IndexNotFound") {
-        throw error;
-      }
-    }
 
     app.listen(port, () => {
       console.log(`Server running on port ${port}`);

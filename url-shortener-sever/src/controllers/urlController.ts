@@ -10,6 +10,17 @@ export const createShortUrl = async (req: Request, res: Response): Promise<void>
       return;
     }
 
+    try {
+      const parsed = new URL(originalUrl);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        res.status(400).json({ message: "Only http and https URLs are allowed" });
+        return;
+      }
+    } catch {
+      res.status(400).json({ message: "Invalid URL format" });
+      return;
+    }
+
     const result = await createShortUrlService(originalUrl);
 
     res.status(result.isExisting ? 200 : 201).json({

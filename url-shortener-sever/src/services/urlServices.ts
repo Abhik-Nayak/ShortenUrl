@@ -49,7 +49,8 @@ export const getOriginalUrlByCode = async (
 
   if (cachedUrl) {
     console.log("Cache hit");
-
+    // Track click regardless of cache hit/miss
+    publishClickEvent(shortCode);
     return cachedUrl;
   }
 

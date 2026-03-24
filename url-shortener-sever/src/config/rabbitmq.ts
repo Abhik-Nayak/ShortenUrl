@@ -26,7 +26,7 @@ export const connectRabbitMQ = async (): Promise<void> => {
   }
 };
 
-export const publishClickEvent = async (shortCode: string): Promise<void> => {
+export const publishClickEvent = (shortCode: string): void => {
   if (!channel) {
     console.warn("RabbitMQ channel not initialized. Dropping click event.");
     return;
@@ -38,13 +38,16 @@ export const publishClickEvent = async (shortCode: string): Promise<void> => {
 const BATCH_SIZE = 10000;
 const BATCH_TIMEOUT = 10000; // 10 seconds
 let clickBatch: Record<string, number> = {};
+let pendingMessages: amqp.Message[] = [];
 let batchTimer: NodeJS.Timeout | null = null;
 
 const flushBatchToDB = async () => {
   if (Object.keys(clickBatch).length === 0) return;
 
   const batchCopy = { ...clickBatch };
-  clickBatch = {}; // Reset immediately to collect new clicks
+  const messagesToAck = [...pendingMessages];
+  clickBatch = {};
+  pendingMessages = [];
 
   try {
     const bulkOps = Object.entries(batchCopy).map(([shortCode, count]) => ({
@@ -58,11 +61,16 @@ const flushBatchToDB = async () => {
       await Url.bulkWrite(bulkOps);
       console.log(`Successfully synced ${bulkOps.length} URL click updates to MongoDB.`);
     }
+
+    // Ack all messages only after successful DB write
+    for (const msg of messagesToAck) {
+      channel.ack(msg);
+    }
   } catch (error) {
-    console.error("Failed to sync clicks to MongoDB. Putting clicks back in batch.", error);
-    // basic retry mechanism: re-add failed counts to the current batch
-    for (const [shortCode, count] of Object.entries(batchCopy)) {
-      clickBatch[shortCode] = (clickBatch[shortCode] || 0) + count;
+    console.error("Failed to sync clicks to MongoDB. Nacking messages for redelivery.", error);
+    // Nack all messages so RabbitMQ redelivers them
+    for (const msg of messagesToAck) {
+      channel.nack(msg, false, true);
     }
   }
 };
@@ -73,9 +81,10 @@ const startClickBatchWorker = () => {
   channel.consume(QUEUE_NAME, (msg) => {
     if (msg) {
       const { shortCode } = JSON.parse(msg.content.toString());
-      
+
       // Aggregate in memory
       clickBatch[shortCode] = (clickBatch[shortCode] || 0) + 1;
+      pendingMessages.push(msg);
 
       // Start the flush timer if not already running
       if (!batchTimer) {
@@ -93,9 +102,6 @@ const startClickBatchWorker = () => {
         }
         flushBatchToDB();
       }
-
-      // Acknowledge the message so it's removed from queue
-      channel.ack(msg);
     }
   });
 };

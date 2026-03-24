@@ -11,7 +11,8 @@ const urlSchema = new Schema<IUrl>(
     originalUrl: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
+      index: true
     },
     shortCode: {
       type: String,
