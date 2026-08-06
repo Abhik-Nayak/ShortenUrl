@@ -1,0 +1,21 @@
+{
+  "name": "shortenurl",
+  "version": "1.0.0",
+  "description": "URL shortener — React client + Express API. This root package only orchestrates the two.",
+  "license": "ISC",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "npm install",
+    "postinstall": "npm install --prefix server && npm install --prefix client",
+    "dev": "concurrently -n api,web -c blue,magenta --kill-others \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev --prefix server",
+    "dev:web": "npm run dev --prefix client",
+    "build": "npm run build --prefix server && npm run build --prefix client",
+    "start": "npm run start --prefix server",
+    "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
