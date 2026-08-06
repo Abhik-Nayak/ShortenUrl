@@ -12,6 +12,7 @@ import { validate } from '../middleware/validation.middleware';
 import {
   createUrlSchema,
   idParamSchema,
+  listUrlsSchema,
   updateUrlSchema,
 } from '../validators/url.validator';
 
@@ -21,7 +22,7 @@ const router = Router();
 router.use(authMiddleware);
 
 router.post('/', validate(createUrlSchema), createUrl);
-router.get('/', listUrls);
+router.get('/', validate(listUrlsSchema), listUrls);
 router.get('/:id', validate(idParamSchema), getUrl);
 router.put('/:id', validate(updateUrlSchema), updateUrl);
 router.delete('/:id', validate(idParamSchema), deleteUrl);

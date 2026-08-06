@@ -31,6 +31,13 @@ export const updateUrlSchema = z.object({
     }),
 });
 
+export const listUrlsSchema = z.object({
+  query: z.object({
+    page: z.coerce.number().int().min(1).optional(),
+    pageSize: z.coerce.number().int().min(1).max(100).optional(),
+  }),
+});
+
 export const idParamSchema = z.object({
   params: z.object({ id: z.string().min(1) }),
 });

@@ -1,4 +1,6 @@
 import express, { Application, Request, Response } from 'express';
+import { env } from './config/env';
+import { prisma } from './config/db';
 import authRoutes from './routes/auth.routes';
 import urlRoutes from './routes/url.routes';
 import { redirect } from './controllers/redirect.controller';
@@ -7,12 +9,18 @@ import { shortCodeParamSchema } from './validators/url.validator';
 import { errorHandler } from './middleware/error.middleware';
 
 const app: Application = express();
-const PORT = 5000;
 
+// Trust the reverse proxy so req.ip reflects the real client (for click hashing).
+app.set('trust proxy', true);
 app.use(express.json());
 
-app.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok' });
+app.get('/health', async (_req: Request, res: Response) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', db: 'up' });
+  } catch {
+    res.status(503).json({ status: 'error', db: 'down' });
+  }
 });
 
 app.use('/api/v1/auth', authRoutes);
@@ -24,8 +32,8 @@ app.get('/:shortCode', validate(shortCodeParamSchema), redirect);
 // Global error handler must be registered after all routes.
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.listen(env.port, () => {
+  console.log(`Server running on http://localhost:${env.port}`);
 });
 
 export default app;

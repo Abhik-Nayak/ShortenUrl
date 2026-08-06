@@ -2,13 +2,14 @@
 
 Base URL: `http://localhost:5000`
 
-> All responses are currently **mocked** (no database). Certain inputs act as
-> triggers to demonstrate error handling — see **Test triggers** below.
+> Backed by PostgreSQL with real JWT auth. Obtain a token from register/login and
+> send it on protected endpoints.
 
 ## Conventions
 
 - Request/response bodies are JSON.
-- Protected endpoints require `Authorization: Bearer <token>` (any non-empty token is accepted in mock mode).
+- Protected endpoints require `Authorization: Bearer <jwt>` obtained from register/login.
+- URL resources are scoped to the authenticated user; another user's `{id}` returns `404`.
 - Errors use a consistent envelope:
   ```json
   { "error": "ErrorName", "message": "Human readable message" }
@@ -81,15 +82,21 @@ Body: `{ "originalUrl?": string (url), "expiresAt?": ISO date }` (at least one)
 
 ---
 
-## Test triggers (mock behaviour)
+## Error behaviour
 
-| Scenario            | How to trigger                                   | Result |
-| ------------------- | ------------------------------------------------ | ------ |
-| Validation failure  | bad email / password < 8 / `originalUrl` not a URL | `400` |
-| Unauthorized        | omit `Authorization` header on `/urls`           | `401` |
-| Invalid credentials | login with password `wrongpassword`              | `401` |
-| Alias conflict      | create url with `customAlias` = `taken`/`admin`/`api` | `409` |
-| Email conflict      | register with `existing@example.com`             | `409` |
-| Not found           | any `/urls/{id}` with id `missing`               | `404` |
-| Expired link        | `GET /expired`                                   | `410` |
-| Success redirect    | `GET /abc123` (any other code)                   | `302` |
+| Scenario            | How it happens                                        | Result |
+| ------------------- | ----------------------------------------------------- | ------ |
+| Validation failure  | bad email / password < 8 / `originalUrl` not a URL    | `400` |
+| Unauthorized        | missing/invalid/expired `Authorization` on protected route | `401` |
+| Invalid credentials | login with a wrong email or password                  | `401` |
+| Alias conflict      | `customAlias` already taken or a reserved word (`admin`, `api`, …) | `409` |
+| Email conflict      | register with an email that already exists            | `409` |
+| Not found           | `/urls/{id}` that doesn't exist or belongs to another user | `404` |
+| Expired link        | `GET /{shortCode}` whose `expiresAt` has passed       | `410` |
+| Success redirect    | `GET /{shortCode}` for an active link                 | `302` |
+
+Notes:
+- `GET /api/v1/urls` accepts `?page` (default 1) and `?pageSize` (default 20, max 100).
+- `DELETE` is a soft delete; deleted links no longer redirect or appear in listings.
+- Each successful redirect records a click (browser/os/device, referrer, hashed IP) and
+  increments the link's click count, feeding the analytics endpoint.

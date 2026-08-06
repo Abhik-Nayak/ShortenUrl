@@ -1,50 +1,17 @@
 import { Request, Response } from 'express';
-import { AuthResponseDto, LoginRequestDto, RegisterRequestDto } from '../dto/auth.dto';
-import { ConflictError, UnauthorizedError } from '../utils/errors';
+import { LoginRequestDto, RegisterRequestDto } from '../dto/auth.dto';
+import * as authService from '../services/auth.service';
 
-/**
- * POST /api/v1/auth/register
- * Trigger: email "existing@example.com" -> 409 conflict.
- */
-export function register(req: Request, res: Response): void {
-  const { email, name } = req.body as RegisterRequestDto;
-
-  if (email === 'existing@example.com') {
-    throw new ConflictError('An account with this email already exists');
-  }
-
-  const response: AuthResponseDto = {
-    user: {
-      id: 'usr_mock_1',
-      email,
-      name,
-      createdAt: new Date().toISOString(),
-    },
-    token: 'mock.jwt.token',
-  };
-
+/** POST /api/v1/auth/register */
+export async function register(req: Request, res: Response): Promise<void> {
+  const { email, password, name } = req.body as RegisterRequestDto;
+  const response = await authService.register(email, password, name);
   res.status(201).json(response);
 }
 
-/**
- * POST /api/v1/auth/login
- * Trigger: password "wrongpassword" -> 401 unauthorized.
- */
-export function login(req: Request, res: Response): void {
+/** POST /api/v1/auth/login */
+export async function login(req: Request, res: Response): Promise<void> {
   const { email, password } = req.body as LoginRequestDto;
-
-  if (password === 'wrongpassword') {
-    throw new UnauthorizedError('Invalid email or password');
-  }
-
-  const response: AuthResponseDto = {
-    user: {
-      id: 'usr_mock_1',
-      email,
-      createdAt: new Date().toISOString(),
-    },
-    token: 'mock.jwt.token',
-  };
-
+  const response = await authService.login(email, password);
   res.status(200).json(response);
 }

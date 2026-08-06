@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { UnauthorizedError } from '../utils/errors';
+import { verifyToken } from '../utils/jwt';
 
-/** Mock auth: requires a non-empty `Authorization: Bearer <token>` header. */
+/** Verifies the `Authorization: Bearer <jwt>` header and attaches `req.user`. */
 export function authMiddleware(req: Request, _res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
 
@@ -16,11 +17,11 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
     return;
   }
 
-  // No DB yet — attach a mock authenticated user.
-  (req as Request & { user?: { id: string; email: string } }).user = {
-    id: 'usr_mock_1',
-    email: 'demo@example.com',
-  };
-
-  next();
+  try {
+    const payload = verifyToken(token);
+    req.user = { id: payload.sub, email: payload.email };
+    next();
+  } catch {
+    next(new UnauthorizedError('Invalid or expired token'));
+  }
 }
