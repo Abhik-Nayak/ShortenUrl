@@ -18,6 +18,12 @@ export const env = {
   dataFile: path.resolve(serverRoot, process.env.DATA_FILE ?? 'data/db.json'),
   baseUrl: (process.env.BASE_URL ?? 'http://localhost:5000').replace(/\/$/, ''),
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  /**
+   * Number of reverse proxies in front of the app. Behind nginx this must be 1,
+   * or every visitor's `req.ip` is 127.0.0.1 and unique-visitor counts collapse
+   * to one. Leave at 0 when the app is exposed directly.
+   */
+  trustProxy: Number(process.env.TRUST_PROXY ?? 0),
 } as const;
 
 if (env.nodeEnv === 'production' && env.jwtSecret === 'dev-only-change-me') {

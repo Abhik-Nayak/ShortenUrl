@@ -8,6 +8,9 @@ import { errorHandler, notFoundHandler } from './middleware/error.middleware.js'
 
 export const app = express();
 
+// Behind nginx this makes req.ip the real client address, not the proxy's.
+if (env.trustProxy > 0) app.set('trust proxy', env.trustProxy);
+
 app.use(cors({ origin: env.corsOrigin }));
 app.use(express.json({ limit: '64kb' }));
 

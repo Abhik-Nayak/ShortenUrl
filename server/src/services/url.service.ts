@@ -9,8 +9,24 @@ import type { CreateUrlInput, UpdateUrlInput } from '../dto/url.dto.js';
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const CODE_LENGTH = 7;
 
-/** Paths the app itself serves — they can't double as short codes. */
-const RESERVED = new Set(['api', 'health', 'assets', 'favicon.ico', 'robots.txt']);
+/**
+ * Paths the app itself serves — they can't double as short codes.
+ *
+ * In production the SPA and the redirect share one origin (nginx serves the
+ * bundle, everything unrecognised falls through to `GET /:shortCode`), so the
+ * client-side routes have to be reserved too or an alias could shadow a page.
+ */
+const RESERVED = new Set([
+  'api',
+  'health',
+  'assets',
+  'favicon.ico',
+  'favicon.svg',
+  'robots.txt',
+  'login',
+  'register',
+  'urls',
+]);
 
 function randomCode(): string {
   const bytes = randomBytes(CODE_LENGTH);
