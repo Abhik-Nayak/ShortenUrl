@@ -1,38 +1,34 @@
-/** Request/response DTOs for URL endpoints. */
+import { z } from 'zod';
 
-export interface CreateUrlRequestDto {
-  originalUrl: string;
-  customAlias?: string;
-  expiresAt?: string;
-}
+/** Only http(s) — otherwise the redirect becomes a javascript:/data: vector. */
+const httpUrl = z
+  .url('Must be a valid URL')
+  .max(2048, 'URL is too long')
+  .refine((value) => /^https?:\/\//i.test(value), 'URL must start with http:// or https://');
 
-export interface UpdateUrlRequestDto {
-  originalUrl?: string;
-  expiresAt?: string;
-}
+const alias = z
+  .string()
+  .trim()
+  .min(3, 'Alias must be at least 3 characters')
+  .max(32, 'Alias must be at most 32 characters')
+  .regex(/^[A-Za-z0-9_-]+$/, 'Alias may only contain letters, numbers, hyphens and underscores');
 
-export interface UrlResponseDto {
-  id: string;
-  originalUrl: string;
-  shortCode: string;
-  shortUrl: string;
-  createdAt: string;
-  expiresAt: string | null;
-  clicks: number;
-}
+const futureDate = z
+  .iso.datetime({ message: 'Must be an ISO 8601 datetime' })
+  .refine((value) => new Date(value).getTime() > Date.now(), 'Expiry must be in the future');
 
-export interface PaginatedUrlsDto {
-  data: UrlResponseDto[];
-  page: number;
-  pageSize: number;
-  total: number;
-}
+export const createUrlSchema = z.object({
+  originalUrl: httpUrl,
+  customAlias: alias.optional(),
+  expiresAt: futureDate.nullish(),
+});
 
-export interface UrlAnalyticsDto {
-  id: string;
-  shortCode: string;
-  totalClicks: number;
-  uniqueVisitors: number;
-  clicksByDay: { date: string; count: number }[];
-  topReferrers: { referrer: string; count: number }[];
-}
+export const updateUrlSchema = z
+  .object({
+    originalUrl: httpUrl.optional(),
+    expiresAt: futureDate.nullish(),
+  })
+  .refine((body) => Object.keys(body).length > 0, 'Provide at least one field to update');
+
+export type CreateUrlInput = z.infer<typeof createUrlSchema>;
+export type UpdateUrlInput = z.infer<typeof updateUrlSchema>;

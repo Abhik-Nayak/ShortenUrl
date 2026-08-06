@@ -1,17 +1,13 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    // Proxy API calls to the Express server (avoids CORS in dev).
+    // Keeps the browser on one origin in dev: /api/* is forwarded to the API tier.
     proxy: {
-      '/api': {
-        target: 'http://localhost:5000',
-        changeOrigin: true,
-      },
+      '/api': { target: 'http://localhost:5000', changeOrigin: true },
     },
   },
-})
+});

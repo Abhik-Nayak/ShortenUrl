@@ -1,39 +1,25 @@
-import express, { Application, Request, Response } from 'express';
-import { env } from './config/env';
-import { prisma } from './config/db';
-import authRoutes from './routes/auth.routes';
-import urlRoutes from './routes/url.routes';
-import { redirect } from './controllers/redirect.controller';
-import { validate } from './middleware/validation.middleware';
-import { shortCodeParamSchema } from './validators/url.validator';
-import { errorHandler } from './middleware/error.middleware';
+import express from 'express';
+import cors from 'cors';
+import { env } from './config/env.js';
+import { authRoutes } from './routes/auth.routes.js';
+import { urlRoutes } from './routes/url.routes.js';
+import { redirect } from './controllers/redirect.controller.js';
+import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
 
-const app: Application = express();
+export const app = express();
 
-// Trust the reverse proxy so req.ip reflects the real client (for click hashing).
-app.set('trust proxy', true);
-app.use(express.json());
+app.use(cors({ origin: env.corsOrigin }));
+app.use(express.json({ limit: '64kb' }));
 
-app.get('/health', async (_req: Request, res: Response) => {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: 'ok', db: 'up' });
-  } catch {
-    res.status(503).json({ status: 'error', db: 'down' });
-  }
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', storage: 'json-file', uptime: process.uptime() });
 });
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/urls', urlRoutes);
 
-// Public short-link redirect (kept last so it doesn't shadow API routes).
-app.get('/:shortCode', validate(shortCodeParamSchema), redirect);
+// Public redirect. Registered last so it can't shadow the API routes above.
+app.get('/:shortCode', redirect);
 
-// Global error handler must be registered after all routes.
+app.use(notFoundHandler);
 app.use(errorHandler);
-
-app.listen(env.port, () => {
-  console.log(`Server running on http://localhost:${env.port}`);
-});
-
-export default app;

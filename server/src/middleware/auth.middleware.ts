@@ -1,27 +1,28 @@
-import { Request, Response, NextFunction } from 'express';
-import { UnauthorizedError } from '../utils/errors';
-import { verifyToken } from '../utils/jwt';
+import type { NextFunction, Request, Response } from 'express';
+import { unauthorized } from '../errors.js';
+import { verifyToken } from '../services/auth.service.js';
 
-/** Verifies the `Authorization: Bearer <jwt>` header and attaches `req.user`. */
-export function authMiddleware(req: Request, _res: Response, next: NextFunction): void {
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      userId?: string;
+    }
+  }
+}
+
+export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization;
 
-  if (!header || !header.startsWith('Bearer ')) {
-    next(new UnauthorizedError('Missing or invalid Authorization header'));
-    return;
-  }
-
-  const token = header.slice('Bearer '.length).trim();
-  if (!token) {
-    next(new UnauthorizedError('Authentication token is required'));
+  if (!header?.startsWith('Bearer ')) {
+    next(unauthorized('Missing Bearer token'));
     return;
   }
 
   try {
-    const payload = verifyToken(token);
-    req.user = { id: payload.sub, email: payload.email };
+    req.userId = verifyToken(header.slice('Bearer '.length)).sub;
     next();
   } catch {
-    next(new UnauthorizedError('Invalid or expired token'));
+    next(unauthorized('Invalid or expired token'));
   }
 }

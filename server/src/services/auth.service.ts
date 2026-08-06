@@ -1,52 +1,62 @@
 import bcrypt from 'bcryptjs';
-import { AuthResponseDto, UserDto } from '../dto/auth.dto';
-import { User } from '../entity/user.entity';
-import { ConflictError, UnauthorizedError } from '../utils/errors';
-import { signToken } from '../utils/jwt';
-import * as userQuery from '../query/user.query';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
+import { conflict, unauthorized } from '../errors.js';
+import { userRepository } from '../repositories/user.repository.js';
+import type { PublicUser, User } from '../types.js';
+import type { LoginInput, RegisterInput } from '../dto/auth.dto.js';
 
 const SALT_ROUNDS = 10;
 
-function toUserDto(row: User): UserDto {
-  return {
-    id: row.id,
-    email: row.email,
-    name: row.name ?? undefined,
-    createdAt: row.createdAt.toISOString(),
-  };
+export interface AuthResult {
+  user: PublicUser;
+  token: string;
 }
 
-function toAuthResponse(row: User): AuthResponseDto {
-  return {
-    user: toUserDto(row),
-    token: signToken({ sub: row.id, email: row.email }),
-  };
+function toPublic({ passwordHash: _passwordHash, ...user }: User): PublicUser {
+  return user;
 }
 
-export async function register(
-  email: string,
-  password: string,
-  name?: string
-): Promise<AuthResponseDto> {
-  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-  try {
-    const user = await userQuery.create({ email, passwordHash, name });
-    return toAuthResponse(user);
-  } catch (err) {
-    if ((err as { code?: string }).code === userQuery.UNIQUE_VIOLATION) {
-      throw new ConflictError('An account with this email already exists');
-    }
-    throw err;
+function issueToken(user: User): string {
+  return jwt.sign({ email: user.email }, env.jwtSecret, {
+    subject: user.id,
+    expiresIn: env.jwtExpiresIn as jwt.SignOptions['expiresIn'],
+  });
+}
+
+export function verifyToken(token: string): { sub: string; email: string } {
+  const payload = jwt.verify(token, env.jwtSecret);
+  if (typeof payload === 'string' || !payload.sub) throw new Error('Malformed token payload');
+  return { sub: payload.sub, email: String(payload.email ?? '') };
+}
+
+export async function register(input: RegisterInput): Promise<AuthResult> {
+  if (await userRepository.findByEmail(input.email)) {
+    throw conflict('An account with that email already exists');
   }
+
+  const user = await userRepository.create({
+    email: input.email,
+    name: input.name ?? null,
+    passwordHash: await bcrypt.hash(input.password, SALT_ROUNDS),
+  });
+
+  return { user: toPublic(user), token: issueToken(user) };
 }
 
-export async function login(email: string, password: string): Promise<AuthResponseDto> {
-  const user = await userQuery.findByEmail(email);
-  // Constant message + always compare against a hash to avoid leaking which of
-  // email/password was wrong (and to reduce timing signal).
-  const ok = user ? await bcrypt.compare(password, user.passwordHash) : false;
-  if (!user || !ok) {
-    throw new UnauthorizedError('Invalid email or password');
+export async function login(input: LoginInput): Promise<AuthResult> {
+  const user = await userRepository.findByEmail(input.email);
+
+  // Same error either way, so the response can't be used to enumerate accounts.
+  if (!user || !(await bcrypt.compare(input.password, user.passwordHash))) {
+    throw unauthorized('Invalid email or password');
   }
-  return toAuthResponse(user);
+
+  return { user: toPublic(user), token: issueToken(user) };
+}
+
+export async function getProfile(userId: string): Promise<PublicUser> {
+  const user = await userRepository.findById(userId);
+  if (!user) throw unauthorized('Account no longer exists');
+  return toPublic(user);
 }

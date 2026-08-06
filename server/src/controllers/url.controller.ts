@@ -1,48 +1,38 @@
-import { Request, Response } from 'express';
-import { CreateUrlRequestDto, UpdateUrlRequestDto } from '../dto/url.dto';
-import * as urlService from '../services/url.service';
-import * as clickService from '../services/click.service';
+import type { Request, Response } from 'express';
+import * as urlService from '../services/url.service.js';
+import { getAnalytics } from '../services/click.service.js';
+import type { CreateUrlInput, UpdateUrlInput } from '../dto/url.dto.js';
 
-/** POST /api/v1/urls */
-export async function createUrl(req: Request, res: Response): Promise<void> {
-  const { originalUrl, customAlias, expiresAt } = req.body as CreateUrlRequestDto;
-  const url = await urlService.createUrl(req.user!.id, originalUrl, customAlias, expiresAt);
-  res.status(201).json(url);
+type IdRequest = Request<{ id: string }>;
+
+function readPaging(req: Request) {
+  const page = Math.max(1, Number(req.query.page ?? 1) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? 20) || 20));
+  return { page, pageSize };
 }
 
-/** GET /api/v1/urls */
-export async function listUrls(req: Request, res: Response): Promise<void> {
-  const page = Number(req.query.page ?? 1);
-  const pageSize = Number(req.query.pageSize ?? 20);
-  const response = await urlService.listUrls(req.user!.id, page, pageSize);
-  res.status(200).json(response);
+export async function create(req: Request, res: Response) {
+  res.status(201).json(await urlService.createUrl(req.userId!, req.body as CreateUrlInput));
 }
 
-/** GET /api/v1/urls/:id */
-export async function getUrl(req: Request, res: Response): Promise<void> {
-  const url = await urlService.getUrl(req.params.id as string, req.user!.id);
-  res.status(200).json(url);
+export async function list(req: Request, res: Response) {
+  const { page, pageSize } = readPaging(req);
+  res.json(await urlService.listUrls(req.userId!, page, pageSize));
 }
 
-/** PUT /api/v1/urls/:id */
-export async function updateUrl(req: Request, res: Response): Promise<void> {
-  const { originalUrl, expiresAt } = req.body as UpdateUrlRequestDto;
-  const url = await urlService.updateUrl(req.params.id as string, req.user!.id, {
-    originalUrl,
-    expiresAt,
-  });
-  res.status(200).json(url);
+export async function getOne(req: IdRequest, res: Response) {
+  res.json(await urlService.getUrl(req.userId!, req.params.id));
 }
 
-/** DELETE /api/v1/urls/:id */
-export async function deleteUrl(req: Request, res: Response): Promise<void> {
-  await urlService.deleteUrl(req.params.id as string, req.user!.id);
+export async function update(req: IdRequest, res: Response) {
+  res.json(await urlService.updateUrl(req.userId!, req.params.id, req.body as UpdateUrlInput));
+}
+
+export async function remove(req: IdRequest, res: Response) {
+  await urlService.deleteUrl(req.userId!, req.params.id);
   res.status(204).send();
 }
 
-/** GET /api/v1/urls/:id/analytics */
-export async function getAnalytics(req: Request, res: Response): Promise<void> {
-  const url = await urlService.getUrl(req.params.id as string, req.user!.id);
-  const analytics = await clickService.getAnalytics(url);
-  res.status(200).json(analytics);
+export async function analytics(req: IdRequest, res: Response) {
+  res.json(await getAnalytics(req.userId!, req.params.id));
 }

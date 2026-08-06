@@ -1,113 +1,90 @@
-import { env } from '../config/env';
-import { PaginatedUrlsDto, UrlResponseDto } from '../dto/url.dto';
-import { Url } from '../entity/url.entity';
-import { ConflictError, NotFoundError } from '../utils/errors';
-import { generateShortCode } from '../utils/shortcode';
-import * as urlQuery from '../query/url.query';
+import { randomBytes } from 'node:crypto';
+import { env } from '../config/env.js';
+import { conflict, notFound } from '../errors.js';
+import { clickRepository } from '../repositories/click.repository.js';
+import { urlRepository } from '../repositories/url.repository.js';
+import type { Url, UrlResponse } from '../types.js';
+import type { CreateUrlInput, UpdateUrlInput } from '../dto/url.dto.js';
 
-/** Reserved words that may not be claimed as custom aliases. */
-const RESERVED_ALIASES = new Set(['taken', 'admin', 'api', 'health']);
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const CODE_LENGTH = 7;
 
-/** Retries when a randomly generated short code collides with an existing one. */
-const MAX_CODE_ATTEMPTS = 5;
+/** Paths the app itself serves — they can't double as short codes. */
+const RESERVED = new Set(['api', 'health', 'assets', 'favicon.ico', 'robots.txt']);
 
-export function toUrlResponse(row: Url): UrlResponseDto {
-  return {
-    id: row.id,
-    originalUrl: row.longUrl,
-    shortCode: row.shortCode,
-    shortUrl: `${env.baseUrl}/${row.shortCode}`,
-    createdAt: row.createdAt.toISOString(),
-    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
-    clicks: Number(row.clickCount),
-  };
+function randomCode(): string {
+  const bytes = randomBytes(CODE_LENGTH);
+  let code = '';
+  for (const byte of bytes) code += ALPHABET[byte % ALPHABET.length];
+  return code;
 }
 
-async function generateUniqueShortCode(): Promise<string> {
-  for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
-    const code = generateShortCode();
-    if (!(await urlQuery.shortCodeExists(code))) {
-      return code;
-    }
+async function generateUniqueCode(): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = randomCode();
+    if (!(await urlRepository.shortCodeExists(code))) return code;
   }
-  throw new Error('Failed to generate a unique short code after several attempts');
+  throw new Error('Could not generate a unique short code');
 }
 
-export async function createUrl(
-  userId: string,
-  originalUrl: string,
-  customAlias?: string,
-  expiresAt?: string
-): Promise<UrlResponseDto> {
+export function toResponse(url: Url, clickCount: number): UrlResponse {
+  const { userId: _userId, ...rest } = url;
+  return { ...rest, shortUrl: `${env.baseUrl}/${url.shortCode}`, clickCount };
+}
+
+export async function createUrl(userId: string, input: CreateUrlInput): Promise<UrlResponse> {
   let shortCode: string;
 
-  if (customAlias) {
-    if (RESERVED_ALIASES.has(customAlias.toLowerCase())) {
-      throw new ConflictError(`Alias '${customAlias}' is already taken`);
+  if (input.customAlias) {
+    if (RESERVED.has(input.customAlias.toLowerCase())) {
+      throw conflict(`"${input.customAlias}" is a reserved alias`);
     }
-    if (await urlQuery.shortCodeExists(customAlias)) {
-      throw new ConflictError(`Alias '${customAlias}' is already taken`);
+    if (await urlRepository.shortCodeExists(input.customAlias)) {
+      throw conflict(`Alias "${input.customAlias}" is already taken`);
     }
-    shortCode = customAlias;
+    shortCode = input.customAlias;
   } else {
-    shortCode = await generateUniqueShortCode();
+    shortCode = await generateUniqueCode();
   }
 
-  const expires = expiresAt ? new Date(expiresAt) : null;
+  const url = await urlRepository.create({
+    userId,
+    shortCode,
+    originalUrl: input.originalUrl,
+    expiresAt: input.expiresAt ?? null,
+  });
 
-  try {
-    const row = await urlQuery.create({ userId, shortCode, longUrl: originalUrl, expiresAt: expires });
-    return toUrlResponse(row);
-  } catch (err) {
-    // Lost a race on the unique short_code between the check and the insert.
-    if ((err as { code?: string }).code === 'P2002') {
-      throw new ConflictError(`Alias '${shortCode}' is already taken`);
-    }
-    throw err;
-  }
+  return toResponse(url, 0);
 }
 
-export async function listUrls(
-  userId: string,
-  page: number,
-  pageSize: number
-): Promise<PaginatedUrlsDto> {
-  const offset = (page - 1) * pageSize;
-  const { rows, total } = await urlQuery.listByUser(userId, pageSize, offset);
+export async function listUrls(userId: string, page: number, pageSize: number) {
+  const { rows, total } = await urlRepository.listByUser(userId, page, pageSize);
+  const counts = await clickRepository.countsByUrlIds(rows.map((r) => r.id));
+
   return {
-    data: rows.map(toUrlResponse),
+    data: rows.map((row) => toResponse(row, counts.get(row.id) ?? 0)),
     page,
     pageSize,
     total,
   };
 }
 
-export async function getUrl(id: string, userId: string): Promise<UrlResponseDto> {
-  const row = await urlQuery.findByIdForUser(id, userId);
-  if (!row) {
-    throw new NotFoundError(`URL with id '${id}' not found`);
-  }
-  return toUrlResponse(row);
+export async function getUrl(userId: string, id: string): Promise<UrlResponse> {
+  const url = await urlRepository.findByIdForUser(id, userId);
+  if (!url) throw notFound('Short URL not found');
+  return toResponse(url, await clickRepository.countByUrlId(id));
 }
 
 export async function updateUrl(
-  id: string,
   userId: string,
-  fields: { originalUrl?: string; expiresAt?: string }
-): Promise<UrlResponseDto> {
-  const row = await urlQuery.update(id, userId, {
-    longUrl: fields.originalUrl,
-    expiresAt: fields.expiresAt === undefined ? undefined : new Date(fields.expiresAt),
-  });
-  if (!row) {
-    throw new NotFoundError(`URL with id '${id}' not found`);
-  }
-  return toUrlResponse(row);
+  id: string,
+  patch: UpdateUrlInput,
+): Promise<UrlResponse> {
+  const url = await urlRepository.update(id, userId, patch);
+  if (!url) throw notFound('Short URL not found');
+  return toResponse(url, await clickRepository.countByUrlId(id));
 }
 
-export async function deleteUrl(id: string, userId: string): Promise<void> {
-  const deleted = await urlQuery.softDelete(id, userId);
-  if (!deleted) {
-    throw new NotFoundError(`URL with id '${id}' not found`);
-  }
+export async function deleteUrl(userId: string, id: string): Promise<void> {
+  if (!(await urlRepository.remove(id, userId))) throw notFound('Short URL not found');
 }

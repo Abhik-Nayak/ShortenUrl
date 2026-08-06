@@ -1,24 +1,15 @@
-/** Request/response DTOs for authentication endpoints. */
+import { z } from 'zod';
 
-export interface RegisterRequestDto {
-  email: string;
-  password: string;
-  name?: string;
-}
+export const registerSchema = z.object({
+  email: z.email('Must be a valid email address').trim().toLowerCase(),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  name: z.string().trim().min(1).max(80).optional(),
+});
 
-export interface LoginRequestDto {
-  email: string;
-  password: string;
-}
+export const loginSchema = z.object({
+  email: z.email('Must be a valid email address').trim().toLowerCase(),
+  password: z.string().min(1, 'Password is required'),
+});
 
-export interface UserDto {
-  id: string;
-  email: string;
-  name?: string;
-  createdAt: string;
-}
-
-export interface AuthResponseDto {
-  user: UserDto;
-  token: string;
-}
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;

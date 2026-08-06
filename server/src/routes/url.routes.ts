@@ -1,31 +1,17 @@
 import { Router } from 'express';
-import {
-  createUrl,
-  deleteUrl,
-  getAnalytics,
-  getUrl,
-  listUrls,
-  updateUrl,
-} from '../controllers/url.controller';
-import { authMiddleware } from '../middleware/auth.middleware';
-import { validate } from '../middleware/validation.middleware';
-import {
-  createUrlSchema,
-  idParamSchema,
-  listUrlsSchema,
-  updateUrlSchema,
-} from '../validators/url.validator';
+import * as controller from '../controllers/url.controller.js';
+import { createUrlSchema, updateUrlSchema } from '../dto/url.dto.js';
+import { requireAuth } from '../middleware/auth.middleware.js';
+import { validateBody } from '../middleware/validate.middleware.js';
 
-const router = Router();
+export const urlRoutes = Router();
 
-// All URL management endpoints require authentication.
-router.use(authMiddleware);
+// Every route below belongs to the authenticated user.
+urlRoutes.use(requireAuth);
 
-router.post('/', validate(createUrlSchema), createUrl);
-router.get('/', validate(listUrlsSchema), listUrls);
-router.get('/:id', validate(idParamSchema), getUrl);
-router.put('/:id', validate(updateUrlSchema), updateUrl);
-router.delete('/:id', validate(idParamSchema), deleteUrl);
-router.get('/:id/analytics', validate(idParamSchema), getAnalytics);
-
-export default router;
+urlRoutes.post('/', validateBody(createUrlSchema), controller.create);
+urlRoutes.get('/', controller.list);
+urlRoutes.get('/:id', controller.getOne);
+urlRoutes.put('/:id', validateBody(updateUrlSchema), controller.update);
+urlRoutes.delete('/:id', controller.remove);
+urlRoutes.get('/:id/analytics', controller.analytics);

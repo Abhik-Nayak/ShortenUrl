@@ -1,49 +1,70 @@
-import { UAParser } from 'ua-parser-js';
-import { UrlAnalyticsDto, UrlResponseDto } from '../dto/url.dto';
-import { hashIp } from '../utils/crypto';
-import * as clickQuery from '../query/urlClick.query';
-import * as urlQuery from '../query/url.query';
+import { createHash } from 'node:crypto';
+import { notFound } from '../errors.js';
+import { clickRepository } from '../repositories/click.repository.js';
+import { urlRepository } from '../repositories/url.repository.js';
+import type { Url } from '../types.js';
 
-export interface ClickContext {
-  userAgent?: string;
-  ip?: string;
-  referrer?: string;
+export interface VisitContext {
+  ip: string | undefined;
+  userAgent: string | undefined;
+  referrer: string | undefined;
 }
 
-/**
- * Record a click and bump the URL's counter. Best-effort: intended to be called
- * fire-and-forget from the redirect path, so failures are logged, not thrown.
- */
-export async function recordClick(urlId: string, ctx: ClickContext): Promise<void> {
-  const parsed = new UAParser(ctx.userAgent).getResult();
+/** Hashed rather than stored raw, so "unique visitors" doesn't mean "we kept your IP". */
+function hashVisitor(ip: string | undefined, userAgent: string | undefined): string {
+  return createHash('sha256').update(`${ip ?? ''}|${userAgent ?? ''}`).digest('hex').slice(0, 32);
+}
 
-  await clickQuery.insert({
-    urlId,
-    browser: parsed.browser.name ?? null,
-    os: parsed.os.name ?? null,
-    device: parsed.device.type ?? 'desktop',
+const isExpired = (url: Url) => url.expiresAt !== null && new Date(url.expiresAt) <= new Date();
+
+/** Resolves a short code to its destination and records the visit. */
+export async function resolveAndRecord(shortCode: string, ctx: VisitContext): Promise<string> {
+  const url = await urlRepository.findByShortCode(shortCode);
+  if (!url) throw notFound('That short link does not exist');
+  if (isExpired(url)) throw notFound('That short link has expired');
+
+  await clickRepository.record({
+    urlId: url.id,
     referrer: ctx.referrer ?? null,
-    ipHash: hashIp(ctx.ip),
-    // country/city require a geo lookup — left null for now.
+    userAgent: ctx.userAgent ?? null,
+    visitorHash: hashVisitor(ctx.ip, ctx.userAgent),
   });
 
-  await urlQuery.incrementClickCount(urlId);
+  return url.originalUrl;
 }
 
-/** Build the analytics payload for a URL the caller already owns. */
-export async function getAnalytics(url: UrlResponseDto): Promise<UrlAnalyticsDto> {
-  const [uniqueVisitors, clicksByDay, topReferrers] = await Promise.all([
-    clickQuery.uniqueVisitors(url.id),
-    clickQuery.clicksByDay(url.id),
-    clickQuery.topReferrers(url.id),
-  ]);
+export async function getAnalytics(userId: string, urlId: string) {
+  const url = await urlRepository.findByIdForUser(urlId, userId);
+  if (!url) throw notFound('Short URL not found');
+
+  const clicks = await clickRepository.listByUrlId(urlId);
+
+  const byDay = new Map<string, number>();
+  const byReferrer = new Map<string, number>();
+  const visitors = new Set<string>();
+
+  for (const click of clicks) {
+    const day = click.clickedAt.slice(0, 10);
+    byDay.set(day, (byDay.get(day) ?? 0) + 1);
+
+    const referrer = click.referrer ?? 'direct';
+    byReferrer.set(referrer, (byReferrer.get(referrer) ?? 0) + 1);
+
+    visitors.add(click.visitorHash);
+  }
 
   return {
     id: url.id,
     shortCode: url.shortCode,
-    totalClicks: url.clicks,
-    uniqueVisitors,
-    clicksByDay,
-    topReferrers,
+    originalUrl: url.originalUrl,
+    totalClicks: clicks.length,
+    uniqueVisitors: visitors.size,
+    clicksByDay: [...byDay.entries()]
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    topReferrers: [...byReferrer.entries()]
+      .map(([referrer, count]) => ({ referrer, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5),
   };
 }

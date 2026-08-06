@@ -1,27 +1,25 @@
 import 'dotenv/config';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-/**
- * Centralised, validated environment configuration. Importing this module loads
- * `.env` (via dotenv) and fails fast if a required variable is missing.
- */
+const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value || value.trim() === '') {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
+function required(name: string, fallback?: string): string {
+  const value = process.env[name] ?? fallback;
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
 }
 
-function optional(name: string, fallback: string): string {
-  const value = process.env[name];
-  return value && value.trim() !== '' ? value : fallback;
-}
-
 export const env = {
-  port: Number(optional('PORT', '5000')),
-  baseUrl: optional('BASE_URL', 'http://localhost:5000'),
-  databaseUrl: required('DATABASE_URL'),
-  jwtSecret: required('JWT_SECRET'),
-  jwtExpiresIn: optional('JWT_EXPIRES_IN', '7d'),
+  port: Number(process.env.PORT ?? 5000),
+  nodeEnv: process.env.NODE_ENV ?? 'development',
+  jwtSecret: required('JWT_SECRET', 'dev-only-change-me'),
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
+  dataFile: path.resolve(serverRoot, process.env.DATA_FILE ?? 'data/db.json'),
+  baseUrl: (process.env.BASE_URL ?? 'http://localhost:5000').replace(/\/$/, ''),
+  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
 } as const;
+
+if (env.nodeEnv === 'production' && env.jwtSecret === 'dev-only-change-me') {
+  throw new Error('JWT_SECRET must be set to a real secret in production');
+}
