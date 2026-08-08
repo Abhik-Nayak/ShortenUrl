@@ -1,0 +1,50 @@
+# Runs the whole app with one command:  docker compose up -d --build
+#
+# Two containers:
+#   api = the Node/Express server        (not reachable from your browser)
+#   web = nginx + the built React site   (this is the one you open)
+#
+# You open http://localhost:8080
+# Nginx sends /api/... to the api container and serves React for everything else.
+#
+# The database is NOT here - it lives at Supabase, out on the internet.
+
+services:
+  api:
+    build: ./server
+
+    # Every setting comes from this one file, so there is only one place to look.
+    env_file: ./server/.env.prod
+
+    # No "ports:" on purpose.
+    # The api is only reachable from the web container, over Docker's private
+    # network. That is safer, and it is why nginx can say "http://api:5000":
+    # Docker turns the service name "api" into that container's address.
+
+    # Docker keeps asking /health until it answers OK, then marks this
+    # container "healthy". /health actually runs a query against Supabase,
+    # so "healthy" really means "the database is reachable".
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+    restart: unless-stopped
+
+  web:
+    build: ./client
+
+    # "8080:80" means: port 8080 on your laptop -> port 80 inside the container.
+    # Change the left number if 8080 is already used by something else.
+    ports:
+      - "8080:80"
+
+    # Wait until api is healthy before starting.
+    # Without this, nginx can start first, fail to find "api", and exit.
+    depends_on:
+      api:
+        condition: service_healthy
+
+    restart: unless-stopped

@@ -1,0 +1,20 @@
+# Files Docker should NOT copy into the image.
+# Paths are relative to the server/ folder, because that is the build context
+# (docker-compose.yml says "build: ./server").
+
+# Installed inside the image instead - the ones on Windows would not run on Linux.
+node_modules
+
+# Rebuilt inside the image by "npm run build".
+dist
+
+# Secrets. These are passed in at run time by docker-compose, never baked into
+# the image - anyone who has the image can read files that were copied into it.
+.env
+.env.*
+!.env.example
+
+# Old JSON file storage, from before the app used a real database.
+data
+
+*.log
