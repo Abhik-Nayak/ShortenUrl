@@ -12,6 +12,7 @@ function readPaging(req: Request) {
 }
 
 export async function create(req: Request, res: Response) {
+  console.log('Creating URL for user:', req.userId, 'with body:', req.body);
   res.status(201).json(await urlService.createUrl(req.userId!, req.body as CreateUrlInput));
 }
 

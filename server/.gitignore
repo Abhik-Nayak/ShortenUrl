@@ -1,6 +1,11 @@
 node_modules/
 dist/
-.env
 
-# The JSON "database" is local state, not source.
+# Every env file except the committed template — .env.prod holds the RDS
+# password and the production JWT secret.
+.env
+.env.*
+!.env.example
+
+# Leftover from the JSON-file store the app used before Postgres.
 data/

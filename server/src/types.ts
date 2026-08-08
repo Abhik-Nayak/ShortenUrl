@@ -1,4 +1,8 @@
-/** Row shapes. These deliberately look like SQL rows so the Postgres swap is mechanical. */
+/**
+ * Row shapes as the application sees them: camelCase, timestamps as ISO-8601
+ * strings. The repositories map these to and from the snake_case Postgres
+ * columns, so nothing above that layer deals in database naming.
+ */
 
 export interface User {
   id: string;
@@ -25,12 +29,6 @@ export interface Click {
   referrer: string | null;
   userAgent: string | null;
   visitorHash: string;
-}
-
-export interface DbSchema {
-  users: User[];
-  urls: Url[];
-  clicks: Click[];
 }
 
 /** What we hand back over HTTP — never includes passwordHash. */
