@@ -15,14 +15,18 @@ A URL shortener (PERN + TypeScript), built one stage at a time from the system d
 | Cache | Redis (stage 7) |
 | Load balancer | Nginx (stage 9), then Kubernetes Ingress (stage 11) |
 
-## Run locally (stage 0)
-Requires Node 20+.
+## Run locally
+Requires Node 20+ and Docker Desktop.
 
 ```bash
-# terminal 1: API on http://localhost:4000
+# 1. Postgres in Docker (host port 5433, data kept in the `pgdata` volume)
+docker compose up -d db
+
+# 2. API on http://localhost:4000
 cd server
 cp .env.example .env
 npm install
+npm run migrate      # creates tables; safe to re-run
 npm run dev
 
 # terminal 2: React app on http://localhost:5173
@@ -31,11 +35,18 @@ npm install
 npm run dev
 ```
 
-Check: `curl http://localhost:4000/health` returns `{"status":"ok"}`, and the web page shows **API status: ok**.
+Check: `curl http://localhost:4000/health` returns `{"status":"ok","db":"ok"}`, and the web page shows **API status: ok**.
+
+Useful database commands:
+```bash
+docker compose exec db psql -U shorten -d shortenurl   # open a SQL shell (\dt lists tables)
+docker compose down        # stop; data is kept
+docker compose down -v     # stop AND delete the data volume
+```
 
 ## Stages
 - [x] 0: Project skeleton
-- [ ] 1: Postgres in Docker + schema
+- [x] 1: Postgres in Docker + schema
 - [ ] 2: Create short URL API
 - [ ] 3: Redirect + Home page
 - [ ] 4: Custom alias + expiry
