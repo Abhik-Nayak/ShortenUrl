@@ -1,23 +1,44 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: shortenurl-db
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-shorten}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shorten}
-      POSTGRES_DB: ${POSTGRES_DB:-shortenurl}
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: shortener
     ports:
-      # host:container. 5433 on the host because a local Postgres already uses 5432.
-      - "${POSTGRES_HOST_PORT:-5433}:5432"
+      - "5433:5432"
     volumes:
-      # Named volume: data survives `docker compose down` (only `down -v` deletes it).
-      - pgdata:/var/lib/postgresql/data
+      - dbdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U app -d shortener"]
       interval: 5s
-      timeout: 3s
       retries: 10
-    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+
+  server:
+    build: ./server
+    environment:
+      DATABASE_URL: postgres://app:app@db:5432/shortener
+      REDIS_URL: redis://redis:6379
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  client:
+    build: ./client
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
 
 volumes:
-  pgdata:
+  dbdata:

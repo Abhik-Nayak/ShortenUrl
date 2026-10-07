@@ -1,13 +1,25 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ShortenUrl</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShortenUrl</title>
+  <style>
+    :root { --bg: #fff; --fg: #111; --field: #fff; --border: #ccc; --link: #0b57d0; --err: #c00; color-scheme: light; }
+    :root[data-theme="dark"] { --bg: #121212; --fg: #eee; --field: #1e1e1e; --border: #444; --link: #8ab4f8; --err: #ff6b6b; color-scheme: dark; }
+    body { font-family: system-ui, sans-serif; max-width: 560px; margin: 80px auto; padding: 0 16px; background: var(--bg); color: var(--fg); }
+    header { display: flex; justify-content: space-between; align-items: center; }
+    form { display: flex; gap: 8px; }
+    input, button { padding: 10px; font-size: 16px; background: var(--field); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; }
+    input { flex: 1; }
+    button { padding: 10px 16px; cursor: pointer; }
+    a { color: var(--link); }
+    .out { margin-top: 20px; font-size: 18px; }
+    .err { color: var(--err); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
 </html>

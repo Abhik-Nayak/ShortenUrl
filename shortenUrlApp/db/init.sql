@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS urls (
+  code       VARCHAR(10) PRIMARY KEY,
+  long_url   TEXT NOT NULL,
+  url_hash   CHAR(64) NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
